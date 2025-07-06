@@ -44,8 +44,9 @@ export async function encryptSensitiveData(plaintext: string): Promise<{
     // Create cipher using AES-256-GCM
     const cipher = createCipheriv('aes-256-gcm', key, iv);
     
-    // Explicitly create buffer from plaintext to avoid detached ArrayBuffer issues
-    const plaintextBuffer = Buffer.from(plaintext, 'utf8');
+    // Explicitly allocate a new buffer to avoid detached ArrayBuffer issues
+    const plaintextBuffer = Buffer.alloc(Buffer.byteLength(plaintext, 'utf8'));
+    plaintextBuffer.write(plaintext, 'utf8');
     
     // Encrypt the data with explicit buffer handling
     const encryptedChunk1 = cipher.update(plaintextBuffer);
