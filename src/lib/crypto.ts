@@ -44,9 +44,16 @@ export async function encryptSensitiveData(plaintext: string): Promise<{
     // Create cipher using AES-256-GCM
     const cipher = createCipheriv('aes-256-gcm', key, iv);
     
-    // Encrypt the data
-    let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
+    // Explicitly create buffer from plaintext to avoid detached ArrayBuffer issues
+    const plaintextBuffer = Buffer.from(plaintext, 'utf8');
+    
+    // Encrypt the data with explicit buffer handling
+    const encryptedChunk1 = cipher.update(plaintextBuffer);
+    const encryptedChunk2 = cipher.final();
+    
+    // Concatenate encrypted chunks into a single buffer, then convert to hex
+    const encryptedBuffer = Buffer.concat([encryptedChunk1, encryptedChunk2]);
+    const encrypted = encryptedBuffer.toString('hex');
     
     // Get the authentication tag
     const authTag = cipher.getAuthTag();
@@ -80,6 +87,7 @@ export async function decryptSensitiveData(encryptedData: {
     const ivBuffer = Buffer.from(iv, 'hex');
     const saltBuffer = Buffer.from(salt, 'hex');
     const authTagBuffer = Buffer.from(authTag, 'hex');
+    const encryptedBuffer = Buffer.from(encrypted, 'hex');
     
     // Derive the same encryption key
     const key = await deriveKey(saltBuffer);
@@ -88,9 +96,13 @@ export async function decryptSensitiveData(encryptedData: {
     const decipher = createDecipheriv('aes-256-gcm', key, ivBuffer);
     decipher.setAuthTag(authTagBuffer);
     
-    // Decrypt the data
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    // Decrypt the data with explicit buffer handling
+    const decryptedChunk1 = decipher.update(encryptedBuffer);
+    const decryptedChunk2 = decipher.final();
+    
+    // Concatenate decrypted chunks into a single buffer, then convert to string
+    const decryptedBuffer = Buffer.concat([decryptedChunk1, decryptedChunk2]);
+    const decrypted = decryptedBuffer.toString('utf8');
     
     return decrypted;
   } catch (error) {
@@ -151,4 +163,4 @@ export async function decryptFromDatabase(encryptedJson: string | null): Promise
   } catch (error) {
     throw new Error(`Failed to decrypt database field: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-} 
+}
