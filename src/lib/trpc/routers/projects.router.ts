@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createTRPCRouter, publicProcedure } from '../init';
-import { db } from '../../db/client';
+import { db, testDatabaseConnection, initializeDatabase } from '../../db/client';
 import { projects } from '../../db/projects.schema';
 import { eq } from 'drizzle-orm';
 import { encryptForDatabase, decryptFromDatabase } from '../../crypto';
@@ -26,7 +26,27 @@ export const projectsRouter = createTRPCRouter({
   // List all projects (with decrypted sensitive fields)
   list: publicProcedure.query(async () => {
     try {
-      console.log('🔍 Projects.list called - fetching from database...');
+      console.log('🔍 Projects.list called - testing database connection...');
+      
+      // Test database connection first
+      const isConnected = await testDatabaseConnection();
+      if (!isConnected) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Database connection failed. Please check your database configuration.',
+        });
+      }
+      
+      // Initialize database if needed
+      const isInitialized = await initializeDatabase();
+      if (!isInitialized) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Database tables not found. Please run database migrations.',
+        });
+      }
+      
+      console.log('🔍 Fetching projects from database...');
       const results = await db.select().from(projects);
       console.log(`📊 Found ${results.length} projects in database:`, results.map(p => ({ id: p.id, name: p.name })));
       
@@ -49,9 +69,31 @@ export const projectsRouter = createTRPCRouter({
       };
     } catch (error) {
       console.error('❌ Failed to list projects:', error);
+      
+      // Provide more specific error messages
+      if (error instanceof TRPCError) {
+        throw error;
+      }
+      
+      // Check if it's a connection error
+      if (error.message?.includes('connect') || error.message?.includes('ECONNREFUSED')) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Cannot connect to database. Please check your database server is running and accessible.',
+        });
+      }
+      
+      // Check if it's a table not found error
+      if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Database tables not found. Please run database migrations first.',
+        });
+      }
+      
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to list projects',
+        message: 'Failed to list projects. Please check your database configuration.',
       });
     }
   }),
@@ -61,6 +103,15 @@ export const projectsRouter = createTRPCRouter({
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input }) => {
       try {
+        // Test database connection first
+        const isConnected = await testDatabaseConnection();
+        if (!isConnected) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Database connection failed. Please check your database configuration.',
+          });
+        }
+        
         const result = await db
           .select()
           .from(projects)
@@ -90,6 +141,11 @@ export const projectsRouter = createTRPCRouter({
         };
       } catch (error) {
         console.error('Failed to get project:', error);
+        
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to get project',
@@ -102,6 +158,15 @@ export const projectsRouter = createTRPCRouter({
     .input(createProjectInput)
     .mutation(async ({ input }) => {
       try {
+        // Test database connection first
+        const isConnected = await testDatabaseConnection();
+        if (!isConnected) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Database connection failed. Please check your database configuration.',
+          });
+        }
+        
         // Validate required fields before encryption
         if (!input.databaseUrl) {
           throw new TRPCError({
@@ -183,6 +248,11 @@ export const projectsRouter = createTRPCRouter({
         };
       } catch (error) {
         console.error('Failed to create project:', error);
+        
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to create project',
@@ -195,6 +265,15 @@ export const projectsRouter = createTRPCRouter({
     .input(updateProjectInput)
     .mutation(async ({ input }) => {
       try {
+        // Test database connection first
+        const isConnected = await testDatabaseConnection();
+        if (!isConnected) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Database connection failed. Please check your database configuration.',
+          });
+        }
+        
         const { id, ...updateData } = input;
 
         // Encrypt sensitive fields if they're being updated
@@ -270,6 +349,11 @@ export const projectsRouter = createTRPCRouter({
         };
       } catch (error) {
         console.error('Failed to update project:', error);
+        
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to update project',
@@ -282,6 +366,15 @@ export const projectsRouter = createTRPCRouter({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ input }) => {
       try {
+        // Test database connection first
+        const isConnected = await testDatabaseConnection();
+        if (!isConnected) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Database connection failed. Please check your database configuration.',
+          });
+        }
+        
         const result = await db
           .delete(projects)
           .where(eq(projects.id, input.id));
@@ -292,6 +385,11 @@ export const projectsRouter = createTRPCRouter({
         };
       } catch (error) {
         console.error('Failed to delete project:', error);
+        
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to delete project',
@@ -334,4 +432,4 @@ export const projectsRouter = createTRPCRouter({
         };
       }
     }),
-}); 
+});
